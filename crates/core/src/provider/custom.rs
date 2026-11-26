@@ -22,17 +22,28 @@ pub struct CustomProvider {
 
 impl CustomProvider {
     pub fn from_config(config: &NcaConfig) -> Result<Self, ProviderError> {
-        let custom = config.provider.custom.clone();
+        // Default to "default" custom provider for backward compatibility
+        Self::from_config_with_name(config, "default")
+    }
+
+    pub fn from_config_with_name(config: &NcaConfig, name: &str) -> Result<Self, ProviderError> {
+        let custom = config.provider.custom.get(name).cloned().ok_or_else(|| {
+            ProviderError::Configuration(format!(
+                "Custom provider '{}' not configured. Add it to provider.custom in config.",
+                name
+            ))
+        })?;
         let api_key = custom.resolve_api_key().ok_or_else(|| {
             ProviderError::Configuration(format!(
-                "missing Custom provider API key; set {} or provide `provider.custom.api_key` in config",
-                custom.api_key_env
+                "missing Custom provider '{}' API key; set {} or provide `provider.custom.{}.api_key` in config",
+                name, custom.api_key_env, name
             ))
         })?;
         if custom.base_url.trim().is_empty() {
-            return Err(ProviderError::Configuration(
-                "missing Custom provider base URL; set `provider.custom.base_url`".into(),
-            ));
+            return Err(ProviderError::Configuration(format!(
+                "missing Custom provider '{}' base URL; set `provider.custom.{}.base_url`",
+                name, name
+            )));
         }
 
         let mut headers = HeaderMap::new();
@@ -175,6 +186,21 @@ mod tests {
     use crate::provider::test_support::{collect_chunks, spawn_sse_server};
     use serde_json::json;
 
+    fn make_custom_config(base_url: String, compatibility: ProviderCompatibility) -> NcaConfig {
+        let mut config = NcaConfig::default();
+        config.provider.custom.insert(
+            "default".to_string(),
+            nca_common::config::CustomProviderConfig {
+                api_key: Some("custom-test-key".into()),
+                base_url,
+                compatibility,
+                model: "custom-model".into(),
+                ..Default::default()
+            },
+        );
+        config
+    }
+
     #[tokio::test]
     async fn custom_openai_compatible_provider_streams() {
         let body = concat!(
@@ -187,11 +213,7 @@ mod tests {
             assert_eq!(request.url(), "/v1/chat/completions");
         });
 
-        let mut config = NcaConfig::default();
-        config.provider.custom.api_key = Some("custom-test-key".into());
-        config.provider.custom.base_url = base_url;
-        config.provider.custom.compatibility = ProviderCompatibility::OpenAi;
-        config.provider.custom.model = "custom-openai-model".into();
+        let config = make_custom_config(base_url, ProviderCompatibility::OpenAi);
 
         let provider = CustomProvider::from_config(&config).expect("provider");
         let stream = provider
@@ -234,11 +256,8 @@ mod tests {
             assert_eq!(request.url(), "/v1/messages");
         });
 
-        let mut config = NcaConfig::default();
-        config.provider.custom.api_key = Some("custom-test-key".into());
-        config.provider.custom.base_url = base_url;
-        config.provider.custom.compatibility = ProviderCompatibility::Anthropic;
-        config.provider.custom.model = "custom-anthropic-model".into();
+        let config = make_custom_config(base_url, ProviderCompatibility::Anthropic);
+        let config = make_custom_config(base_url, ProviderCompatibility::Anthropic);
 
         let provider = CustomProvider::from_config(&config).expect("provider");
         let stream = provider
@@ -276,10 +295,7 @@ mod tests {
         .to_string();
         let base_url = spawn_sse_server(body, 200, |_| {});
 
-        let mut config = NcaConfig::default();
-        config.provider.custom.api_key = Some("custom-test-key".into());
-        config.provider.custom.base_url = base_url;
-        config.provider.custom.compatibility = ProviderCompatibility::OpenAi;
+        let config = make_custom_config(base_url, ProviderCompatibility::OpenAi);
 
         let provider = CustomProvider::from_config(&config).expect("provider");
         let stream = provider
@@ -312,10 +328,7 @@ mod tests {
         .to_string();
         let base_url = spawn_sse_server(body, 200, |_| {});
 
-        let mut config = NcaConfig::default();
-        config.provider.custom.api_key = Some("custom-test-key".into());
-        config.provider.custom.base_url = base_url;
-        config.provider.custom.compatibility = ProviderCompatibility::Anthropic;
+        let config = make_custom_config(base_url, ProviderCompatibility::Anthropic);
 
         let provider = CustomProvider::from_config(&config).expect("provider");
         let stream = provider

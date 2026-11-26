@@ -35,7 +35,7 @@ pub fn model_accepts_native_images(kind: ProviderKind, model: &str) -> bool {
                 || m.contains("vision")
                 || m.contains("qwen-vl")
         }
-        ProviderKind::Custom => {
+        ProviderKind::Custom(_) => {
             m.contains("gpt-4o")
                 || m.contains("gpt-4-turbo")
                 || m.contains("gpt-5")

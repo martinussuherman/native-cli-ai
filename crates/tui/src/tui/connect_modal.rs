@@ -54,7 +54,7 @@ pub const CONNECT_CATALOG: &[CatalogEntry] = &[
     },
     CatalogEntry {
         section: ConnectSection::Other,
-        kind: ProviderKind::Custom,
+        kind: ProviderKind::Custom("default".to_string()),
         title: "Custom",
         subtitle: "Bring your own endpoint (/provider → Add custom)",
     },

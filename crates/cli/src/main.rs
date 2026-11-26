@@ -1539,18 +1539,33 @@ async fn add_memory_note(
 }
 
 fn show_models(config: &NcaConfig, json: bool) -> anyhow::Result<()> {
+    let mut provider_models = Vec::new();
+
+    // Built-in providers
+    for provider in ProviderKind::BUILTIN {
+        provider_models.push(ProviderModelOutput {
+            provider: provider.display_name(),
+            model: config.provider.model_for(provider).to_string(),
+            base_url: config.provider.base_url_for(provider).to_string(),
+            selected: &provider == &config.provider.default,
+        });
+    }
+
+    // Custom providers
+    for (name, custom_config) in &config.provider.custom {
+        let custom_kind = ProviderKind::Custom(name.clone());
+        provider_models.push(ProviderModelOutput {
+            provider: custom_kind.display_name(),
+            model: custom_config.model.clone(),
+            base_url: custom_config.base_url.clone(),
+            selected: custom_kind == config.provider.default,
+        });
+    }
+
     let output = ModelCatalogOutput {
-        default_provider: config.provider.default.display_name().to_string(),
-        default_model: config.model.default_model.clone(),
-        provider_models: ProviderKind::ALL
-            .into_iter()
-            .map(|provider| ProviderModelOutput {
-                provider: provider.display_name().to_string(),
-                model: config.provider.model_for(provider).to_string(),
-                base_url: config.provider.base_url_for(provider).to_string(),
-                selected: provider == config.provider.default,
-            })
-            .collect(),
+        default_provider: config.provider.default.display_name(),
+        default_model: config.provider.active_model().to_string(),
+        provider_models,
         aliases: config.model.aliases.clone(),
         thinking_enabled: config.model.enable_thinking,
         thinking_budget: config.model.thinking_budget,
@@ -1588,20 +1603,38 @@ fn show_doctor(config: &NcaConfig, workspace_root: &Path, json: bool) -> anyhow:
     let skills = SkillCatalog::discover(workspace_root, &config.harness.skill_directories)
         .map(|skills| skills.len())
         .unwrap_or(0);
+
+    let mut providers = Vec::new();
+
+    // Built-in providers
+    for provider in ProviderKind::BUILTIN {
+        providers.push(ProviderDoctorStatus {
+            provider: provider.display_name(),
+            selected: &provider == &config.provider.default,
+            api_key_present: config.provider.api_key_present_for(provider),
+            api_key_env: config.provider.api_key_env_for(provider).to_string(),
+            model: config.provider.model_for(provider).to_string(),
+            base_url: config.provider.base_url_for(provider).to_string(),
+        });
+    }
+
+    // Custom providers
+    for (name, custom_config) in &config.provider.custom {
+        let custom_kind = ProviderKind::Custom(name.clone());
+        providers.push(ProviderDoctorStatus {
+            provider: custom_kind.display_name(),
+            selected: custom_kind == config.provider.default,
+            api_key_present: config.provider.api_key_present_for(custom_kind),
+            api_key_env: config.provider.api_key_env_for(custom_kind).to_string(),
+            model: custom_config.model.clone(),
+            base_url: custom_config.base_url.clone(),
+        });
+    }
+
     let output = DoctorOutput {
-        provider: config.provider.default.display_name().to_string(),
-        default_model: config.model.default_model.clone(),
-        providers: ProviderKind::ALL
-            .into_iter()
-            .map(|provider| ProviderDoctorStatus {
-                provider: provider.display_name().to_string(),
-                selected: provider == config.provider.default,
-                api_key_present: config.provider.api_key_present_for(provider),
-                api_key_env: config.provider.api_key_env_for(provider).to_string(),
-                model: config.provider.model_for(provider).to_string(),
-                base_url: config.provider.base_url_for(provider).to_string(),
-            })
-            .collect(),
+        provider: config.provider.default.display_name(),
+        default_model: config.provider.active_model().to_string(),
+        providers,
         mcp_server_count: config
             .mcp
             .servers
@@ -1709,16 +1742,27 @@ fn show_config(config: &NcaConfig, workspace_root: &Path, json: bool) -> anyhow:
             "Workspace config: {}",
             nca_common::config::workspace_config_path(workspace_root).display()
         );
-        println!("Default provider: {:?}", config.provider.default);
-        println!("Default model: {}", config.model.default_model);
+        println!("Default provider: {}", config.provider.default.display_name());
+        println!("Default model: {}", config.provider.active_model());
         println!("Permission mode: {:?}", config.permissions.mode);
         println!("Provider endpoints:");
-        for provider in ProviderKind::ALL {
+        // Built-in providers
+        for provider in ProviderKind::BUILTIN {
             println!(
                 "  {} -> model={} base_url={}",
                 provider.display_name(),
                 config.provider.model_for(provider),
                 config.provider.base_url_for(provider)
+            );
+        }
+        // Custom providers
+        for (name, custom_config) in &config.provider.custom {
+            let custom_kind = ProviderKind::Custom(name.clone());
+            println!(
+                "  {} -> model={} base_url={}",
+                custom_kind.display_name(),
+                custom_config.model,
+                custom_config.base_url
             );
         }
         println!(

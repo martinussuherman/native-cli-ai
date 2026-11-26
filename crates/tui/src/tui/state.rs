@@ -949,16 +949,30 @@ impl TuiSessionState {
         }
     }
 
-    pub fn open_provider_picker(&mut self, current: ProviderKind, for_api_key: bool) {
-        let index = ProviderKind::ALL
+    pub fn open_provider_picker(
+        &mut self,
+        current: ProviderKind,
+        for_api_key: bool,
+        custom_providers: Vec<String>,
+    ) {
+        let builtin = ProviderKind::BUILTIN;
+        let index = builtin
             .iter()
             .position(|p| *p == current)
-            .unwrap_or(0);
+            .unwrap_or_else(|| {
+                // Check custom providers
+                custom_providers
+                    .iter()
+                    .position(|name| ProviderKind::Custom(name.clone()) == current)
+                    .map(|i| i + builtin.len())
+                    .unwrap_or(0)
+            });
         self.set_overlay(UiOverlay::ProviderPicker {
             index,
             scroll: 0,
             for_api_key,
             include_add_row: !for_api_key,
+            custom_providers,
         });
         self.sync_provider_picker_scroll();
     }
@@ -969,9 +983,18 @@ impl TuiSessionState {
         }
     }
 
-    /// Row count for the open provider picker (built-ins plus optional “Add custom…” row).
+    /// Row count for the open provider picker (built-ins plus custom providers plus optional “Add custom…” row).
     pub fn provider_picker_visible_row_count(&self) -> usize {
-        ProviderKind::ALL.len() + usize::from(self.provider_picker_include_add_row())
+        let custom_count = self.provider_picker_custom_providers().len();
+        ProviderKind::BUILTIN.len() + custom_count + usize::from(self.provider_picker_include_add_row())
+    }
+
+    /// Get the list of custom providers from the provider picker overlay.
+    fn provider_picker_custom_providers(&self) -> Vec<String> {
+        match &self.overlay {
+            UiOverlay::ProviderPicker { custom_providers, .. } => custom_providers.clone(),
+            _ => Vec::new(),
+        }
     }
 
     /// Max provider rows shown at once (smaller than [`ProviderKind::ALL`] so short terminals can scroll).

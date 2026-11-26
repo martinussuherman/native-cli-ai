@@ -65,6 +65,7 @@ pub enum UiOverlay {
         scroll: usize,
         for_api_key: bool,
         include_add_row: bool,
+        custom_providers: Vec<String>,
     },
     CustomProviderSetup {
         step: CustomProviderSetupStep,

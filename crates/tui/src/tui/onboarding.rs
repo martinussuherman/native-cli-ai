@@ -31,7 +31,7 @@ fn onboarding_connect_rows(search: &str) -> Vec<ConnectRow> {
         match row {
             ConnectRow::SectionHeader(label) => pending_header = Some(label),
             ConnectRow::Provider {
-                kind: ProviderKind::Custom,
+                kind: ProviderKind::Custom(_),
                 ..
             } => {}
             provider @ ConnectRow::Provider { .. } => {

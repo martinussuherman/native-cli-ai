@@ -106,6 +106,7 @@ pub enum TuiCmd {
     ValidateApiKey(ProviderKind, String),
     /// Apply custom provider settings from the TUI wizard.
     ApplyCustomProviderSetup {
+        name: String,
         compatibility: ProviderCompatibility,
         base_url: String,
         api_key: String,
@@ -902,8 +903,10 @@ pub fn run_blocking(
 
                 // LLM provider picker (default provider or API-key target).
                 if g.provider_picker_open() {
-                    let all = ProviderKind::ALL;
-                    let n_builtin = all.len();
+                    let builtin = ProviderKind::BUILTIN;
+                    let n_builtin = builtin.len();
+                    let custom_providers = g.provider_picker_custom_providers();
+                    let n_custom = custom_providers.len();
                     let n = g.provider_picker_visible_row_count();
                     let cap = crate::tui::state::TuiSessionState::PROVIDER_PICKER_VISIBLE_ROWS.min(n.max(1));
                     let scroll = g.provider_picker_scroll().min(n.saturating_sub(1));
@@ -930,13 +933,11 @@ pub fn run_blocking(
                     let row_labels: Vec<String> = (0..n)
                         .map(|i| {
                             if i < n_builtin {
-                                let p = all[i];
-                                let name = p.display_name();
-                                if p == ProviderKind::Custom {
-                                    format!("{name} (BYO endpoint)")
-                                } else {
-                                    name.to_string()
-                                }
+                                let p = builtin[i];
+                                p.display_name()
+                            } else if i < n_builtin + n_custom {
+                                let name = &custom_providers[i - n_builtin];
+                                format!("Custom ({name})")
                             } else {
                                 "Add custom provider…".to_string()
                             }
@@ -2205,6 +2206,7 @@ pub fn run_blocking(
                                     g.close_custom_provider_setup();
                                     drop(g);
                                     let _ = cmd_tx.try_send(TuiCmd::ApplyCustomProviderSetup {
+                                        name: "custom".to_string(),
                                         compatibility,
                                         base_url,
                                         api_key,
@@ -2255,7 +2257,9 @@ pub fn run_blocking(
                     // Provider picker (settings).
                     if g.provider_picker_open() {
                         let n = g.provider_picker_visible_row_count();
-                        let n_builtin = ProviderKind::ALL.len();
+                        let n_builtin = ProviderKind::BUILTIN.len();
+                        let custom_providers = g.provider_picker_custom_providers();
+                        let n_custom = custom_providers.len();
                         match (key.code, key.modifiers) {
                             (KeyCode::Esc, _) => {
                                 g.close_provider_picker();
@@ -2286,10 +2290,10 @@ pub fn run_blocking(
                                             .to_string(),
                                         String::new(),
                                         "Option B — composer commands:".to_string(),
-                                        "  /custom openai <base-url> [api-key] [model]".to_string(),
-                                        "  /custom anthropic <base-url> [api-key] [model]".to_string(),
+                                        "  /custom <name> openai <base-url> [api-key] [model]".to_string(),
+                                        "  /custom <name> anthropic <base-url> [api-key] [model]".to_string(),
                                         String::new(),
-                                        "Then pick \"Custom\" in /provider or run /provider custom.".to_string(),
+                                        "Then pick \"Custom (name)\" in /provider or run /provider custom:<name>.".to_string(),
                                     ],
                                 );
                             }
@@ -2299,16 +2303,22 @@ pub fn run_blocking(
                                     continue;
                                 }
                                 let for_key = g.provider_picker_for_api_key();
-                                if g.provider_picker_include_add_row()
-                                    && *g.provider_picker_index_mut().unwrap() == n_builtin
-                                {
+                                let idx = g.provider_picker_index();
+                                if g.provider_picker_include_add_row() && idx == n_builtin + n_custom {
                                     let hint = g.model.clone();
                                     g.close_provider_picker();
                                     g.open_custom_provider_setup(hint);
                                     continue;
                                 }
-                                let p =
-                                    ProviderKind::ALL[g.provider_picker_index().min(n_builtin - 1)];
+                                let p = if idx < n_builtin {
+                                    ProviderKind::BUILTIN[idx]
+                                } else if idx < n_builtin + n_custom {
+                                    let name = custom_providers[idx - n_builtin].clone();
+                                    ProviderKind::Custom(name)
+                                } else {
+                                    // Should not happen, but fall back to first builtin
+                                    ProviderKind::BUILTIN[0]
+                                };
                                 g.close_provider_picker();
                                 if for_key {
                                     drop(g);

@@ -10,13 +10,15 @@ use super::{Provider, ProviderError};
 
 /// Build the configured provider for the current workspace.
 pub fn build_provider(config: &NcaConfig) -> Result<Box<dyn Provider>, ProviderError> {
-    match config.provider.default {
+    match &config.provider.default {
         ProviderKind::MiniMax => Ok(Box::new(MiniMaxProvider::from_config(config)?)),
         ProviderKind::OpenRouter => Ok(Box::new(OpenRouterProvider::from_config(config)?)),
         ProviderKind::Anthropic => Ok(Box::new(AnthropicProvider::from_config(config)?)),
         ProviderKind::OpenAi => Ok(Box::new(OpenAiProvider::from_config(config)?)),
         ProviderKind::Alibaba => Ok(Box::new(AlibabaProvider::from_config(config)?)),
-        ProviderKind::Custom => Ok(Box::new(CustomProvider::from_config(config)?)),
+        ProviderKind::Custom(name) => {
+            Ok(Box::new(CustomProvider::from_config_with_name(config, name)?))
+        }
     }
 }
 
@@ -26,7 +28,7 @@ mod tests {
 
     #[test]
     fn factory_builds_each_supported_provider_when_configured() {
-        for kind in ProviderKind::ALL {
+        for kind in ProviderKind::BUILTIN {
             let mut config = NcaConfig::default();
             config.provider.default = kind;
             match kind {
@@ -42,13 +44,10 @@ mod tests {
                 ProviderKind::OpenRouter => {
                     config.provider.openrouter.api_key = Some("openrouter-key".into());
                 }
-                ProviderKind::Custom => {
-                    config.provider.custom.api_key = Some("custom-key".into());
-                    config.provider.custom.base_url = "https://custom.example".into();
-                }
                 ProviderKind::Alibaba => {
                     config.provider.alibaba.api_key = Some("alibaba-key".into());
                 }
+                ProviderKind::Custom(_) => unreachable!(),
             }
 
             let provider = build_provider(&config);
@@ -59,6 +58,25 @@ mod tests {
                 provider.as_ref().err()
             );
         }
+
+        // Test custom provider
+        let mut config = NcaConfig::default();
+        config.provider.default = ProviderKind::Custom("test".to_string());
+        config.provider.custom.insert(
+            "test".to_string(),
+            nca_common::config::CustomProviderConfig {
+                api_key: Some("custom-key".into()),
+                base_url: "https://custom.example".into(),
+                ..Default::default()
+            },
+        );
+
+        let provider = build_provider(&config);
+        assert!(
+            provider.is_ok(),
+            "expected custom provider to build, got {:?}",
+            provider.as_ref().err()
+        );
     }
 
     #[test]

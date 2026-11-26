@@ -309,7 +309,9 @@ impl NcaConfig {
             ProviderKind::OpenAi => self.provider.openai.api_key = Some(key),
             ProviderKind::Anthropic => self.provider.anthropic.api_key = Some(key),
             ProviderKind::OpenRouter => self.provider.openrouter.api_key = Some(key),
-            ProviderKind::Custom => self.provider.custom.api_key = Some(key),
+            ProviderKind::Custom(name) => {
+                self.provider.custom.entry(name).or_default().api_key = Some(key);
+            }
             ProviderKind::Alibaba => self.provider.alibaba.api_key = Some(key),
         }
     }
@@ -321,13 +323,19 @@ impl NcaConfig {
             ProviderKind::OpenAi => self.provider.openai.base_url = base_url,
             ProviderKind::Anthropic => self.provider.anthropic.base_url = base_url,
             ProviderKind::OpenRouter => self.provider.openrouter.base_url = base_url,
-            ProviderKind::Custom => self.provider.custom.base_url = base_url,
+            ProviderKind::Custom(name) => {
+                self.provider.custom.entry(name).or_default().base_url = base_url;
+            }
             ProviderKind::Alibaba => self.provider.alibaba.base_url = base_url,
         }
     }
 
     pub fn set_custom_compatibility(&mut self, compatibility: ProviderCompatibility) {
-        self.provider.custom.compatibility = compatibility;
+        self.provider
+            .custom
+            .entry("default".to_string())
+            .or_default()
+            .compatibility = compatibility;
     }
 
     /// Editor command: `NCA_EDITOR`, then `[ui].editor`, then `EDITOR`, then `vim`.
@@ -958,7 +966,8 @@ pub struct ProviderConfig {
     pub openai: OpenAiConfig,
     pub anthropic: AnthropicConfig,
     pub openrouter: OpenRouterConfig,
-    pub custom: CustomProviderConfig,
+    #[serde(default)]
+    pub custom: BTreeMap<String, CustomProviderConfig>,
     #[serde(default)]
     pub alibaba: AlibabaConfig,
 }
@@ -971,7 +980,7 @@ impl Default for ProviderConfig {
             openai: OpenAiConfig::default(),
             anthropic: AnthropicConfig::default(),
             openrouter: OpenRouterConfig::default(),
-            custom: CustomProviderConfig::default(),
+            custom: BTreeMap::new(),
             alibaba: AlibabaConfig::default(),
         }
     }
@@ -995,8 +1004,10 @@ impl ProviderConfig {
         if let Some(openrouter) = partial.openrouter {
             self.openrouter.merge(openrouter);
         }
-        if let Some(custom) = partial.custom {
-            self.custom.merge(custom);
+        if let Some(custom_map) = partial.custom {
+            for (name, custom) in custom_map {
+                self.custom.entry(name).or_default().merge(custom);
+            }
         }
         if let Some(alibaba) = partial.alibaba {
             self.alibaba.merge(alibaba);
@@ -1009,7 +1020,11 @@ impl ProviderConfig {
             ProviderKind::OpenRouter => &self.openrouter.model,
             ProviderKind::Anthropic => &self.anthropic.model,
             ProviderKind::OpenAi => &self.openai.model,
-            ProviderKind::Custom => &self.custom.model,
+            ProviderKind::Custom(name) => self
+                .custom
+                .get(name)
+                .map(|c| c.model.as_str())
+                .unwrap_or("custom-model"),
             ProviderKind::Alibaba => &self.alibaba.model,
         }
     }
@@ -1025,7 +1040,9 @@ impl ProviderConfig {
             ProviderKind::OpenRouter => self.openrouter.model = model,
             ProviderKind::Anthropic => self.anthropic.model = model,
             ProviderKind::OpenAi => self.openai.model = model,
-            ProviderKind::Custom => self.custom.model = model,
+            ProviderKind::Custom(name) => {
+                self.custom.entry(name).or_default().model = model;
+            }
             ProviderKind::Alibaba => self.alibaba.model = model,
         }
     }
@@ -1036,7 +1053,11 @@ impl ProviderConfig {
             ProviderKind::OpenRouter => &self.openrouter.model,
             ProviderKind::Anthropic => &self.anthropic.model,
             ProviderKind::OpenAi => &self.openai.model,
-            ProviderKind::Custom => &self.custom.model,
+            ProviderKind::Custom(name) => self
+                .custom
+                .get(name)
+                .map(|c| c.model.as_str())
+                .unwrap_or("custom-model"),
             ProviderKind::Alibaba => &self.alibaba.model,
         }
     }
@@ -1046,8 +1067,12 @@ impl ProviderConfig {
             ProviderKind::MiniMax => &self.minimax.base_url,
             ProviderKind::OpenRouter => &self.openrouter.base_url,
             ProviderKind::Anthropic => &self.anthropic.base_url,
-            ProviderKind::OpenAi => &self.openai.base_url,
-            ProviderKind::Custom => &self.custom.base_url,
+            ProviderKind::OpenAi => self.openai.base_url.as_str(),
+            ProviderKind::Custom(name) => self
+                .custom
+                .get(name)
+                .map(|c| c.base_url.as_str())
+                .unwrap_or(""),
             ProviderKind::Alibaba => &self.alibaba.base_url,
         }
     }
@@ -1058,7 +1083,11 @@ impl ProviderConfig {
             ProviderKind::OpenRouter => &self.openrouter.api_key_env,
             ProviderKind::Anthropic => &self.anthropic.api_key_env,
             ProviderKind::OpenAi => &self.openai.api_key_env,
-            ProviderKind::Custom => &self.custom.api_key_env,
+            ProviderKind::Custom(name) => self
+                .custom
+                .get(name)
+                .map(|c| c.api_key_env.as_str())
+                .unwrap_or("CUSTOM_PROVIDER_API_KEY"),
             ProviderKind::Alibaba => &self.alibaba.api_key_env,
         }
     }
@@ -1069,7 +1098,11 @@ impl ProviderConfig {
             ProviderKind::OpenRouter => self.openrouter.resolve_api_key().is_some(),
             ProviderKind::Anthropic => self.anthropic.resolve_api_key().is_some(),
             ProviderKind::OpenAi => self.openai.resolve_api_key().is_some(),
-            ProviderKind::Custom => self.custom.resolve_api_key().is_some(),
+            ProviderKind::Custom(name) => self
+                .custom
+                .get(name)
+                .map(|c| c.resolve_api_key().is_some())
+                .unwrap_or(false),
             ProviderKind::Alibaba => self.alibaba.resolve_api_key().is_some(),
         }
     }
@@ -1083,7 +1116,7 @@ impl ProviderConfig {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum ProviderKind {
     MiniMax,
@@ -1091,28 +1124,36 @@ pub enum ProviderKind {
     Anthropic,
     OpenAi,
     Alibaba,
-    Custom,
+    #[serde(rename = "custom")]
+    Custom(String),
 }
 
 impl ProviderKind {
-    pub const ALL: [ProviderKind; 6] = [
+    /// Returns all built-in provider kinds (excluding custom named providers).
+    pub const BUILTIN: [ProviderKind; 5] = [
         ProviderKind::MiniMax,
         ProviderKind::OpenAi,
         ProviderKind::Anthropic,
         ProviderKind::OpenRouter,
         ProviderKind::Alibaba,
-        ProviderKind::Custom,
     ];
 
     /// Parse user/CLI input (slash commands, TUI pickers).
+    /// Supports "custom:<name>" for named custom providers.
     pub fn from_cli_name(value: &str) -> Option<Self> {
-        match value.trim().to_ascii_lowercase().as_str() {
+        let value = value.trim().to_ascii_lowercase();
+        if let Some(name) = value.strip_prefix("custom:") {
+            if !name.is_empty() {
+                return Some(Self::Custom(name.to_string()));
+            }
+        }
+        match value.as_str() {
             "minimax" | "mini-max" | "minimaxi" => Some(Self::MiniMax),
             "openai" | "open-ai" | "gpt" => Some(Self::OpenAi),
             "anthropic" | "claude" => Some(Self::Anthropic),
             "openrouter" | "open-router" => Some(Self::OpenRouter),
             "alibaba" | "dashscope" | "qwen" => Some(Self::Alibaba),
-            "custom" => Some(Self::Custom),
+            "custom" => Some(Self::Custom("default".to_string())),
             _ => None,
         }
     }
@@ -1123,28 +1164,55 @@ impl ProviderKind {
             "anthropic" => Self::Anthropic,
             "openai" => Self::OpenAi,
             "alibaba" | "dashscope" | "qwen" => Self::Alibaba,
-            "custom" => Self::Custom,
+            "custom" => Self::Custom("default".to_string()),
             _ => Self::MiniMax,
         }
     }
 
-    pub fn display_name(self) -> &'static str {
+    pub fn display_name(&self) -> String {
         match self {
-            ProviderKind::MiniMax => "MiniMax",
-            ProviderKind::OpenRouter => "OpenRouter",
-            ProviderKind::Anthropic => "Anthropic",
-            ProviderKind::OpenAi => "OpenAI",
-            ProviderKind::Alibaba => "Alibaba",
-            ProviderKind::Custom => "Custom",
+            ProviderKind::MiniMax => "MiniMax".to_string(),
+            ProviderKind::OpenRouter => "OpenRouter".to_string(),
+            ProviderKind::Anthropic => "Anthropic".to_string(),
+            ProviderKind::OpenAi => "OpenAI".to_string(),
+            ProviderKind::Alibaba => "Alibaba".to_string(),
+            ProviderKind::Custom(name) => format!("Custom ({name})"),
         }
     }
 
     /// Match [`display_name`](Self::display_name) output (case-insensitive).
     pub fn parse_display_name(s: &str) -> Option<Self> {
         let t = s.trim();
-        Self::ALL
-            .into_iter()
-            .find(|k| k.display_name().eq_ignore_ascii_case(t))
+        // Check built-in providers first
+        for k in Self::BUILTIN {
+            if k.display_name().eq_ignore_ascii_case(t) {
+                return Some(k);
+            }
+        }
+        // Check for "Custom (name)" format
+        if let Some(name) = t.strip_prefix("Custom (").and_then(|s| s.strip_suffix(')')) {
+            return Some(Self::Custom(name.to_string()));
+        }
+        // Check for "custom:name" format
+        if let Some(name) = t.strip_prefix("custom:") {
+            if !name.is_empty() {
+                return Some(Self::Custom(name.to_string()));
+            }
+        }
+        None
+    }
+
+    /// Get the custom provider name if this is a Custom variant.
+    pub fn custom_name(&self) -> Option<&str> {
+        match self {
+            ProviderKind::Custom(name) => Some(name),
+            _ => None,
+        }
+    }
+
+    /// Check if this is a Custom provider variant.
+    pub fn is_custom(&self) -> bool {
+        matches!(self, ProviderKind::Custom(_))
     }
 }
 
@@ -2025,7 +2093,7 @@ struct PartialProviderConfig {
     openai: Option<PartialOpenAiConfig>,
     anthropic: Option<PartialAnthropicConfig>,
     openrouter: Option<PartialOpenRouterConfig>,
-    custom: Option<PartialCustomProviderConfig>,
+    custom: Option<BTreeMap<String, PartialCustomProviderConfig>>,
     alibaba: Option<PartialAlibabaConfig>,
 }
 
@@ -2541,7 +2609,11 @@ mod tests {
         );
         assert_eq!(
             ProviderKind::from_cli_name("custom"),
-            Some(ProviderKind::Custom)
+            Some(ProviderKind::Custom("default".to_string()))
+        );
+        assert_eq!(
+            ProviderKind::from_cli_name("custom:my-provider"),
+            Some(ProviderKind::Custom("my-provider".to_string()))
         );
         assert_eq!(
             ProviderKind::from_cli_name("alibaba"),

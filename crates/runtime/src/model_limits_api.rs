@@ -170,13 +170,18 @@ async fn query_provider_limits(config: &NcaConfig, model: &str) -> Option<usize>
             let normalized_base = base.strip_suffix("/v1").unwrap_or(base);
             fetch_openai_context(&client, normalized_base, &key, model).await
         }
-        ProviderKind::Custom => {
-            let Some(key) = config.provider.custom.resolve_api_key() else {
-                tracing::debug!("context API: custom selected but no API key");
+        ProviderKind::Custom(name) => {
+            let custom = config.provider.custom.get(name);
+            let Some(custom) = custom else {
+                tracing::debug!("context API: custom provider '{}' not configured", name);
                 return None;
             };
-            let base = config.provider.custom.base_url.trim_end_matches('/');
-            match config.provider.custom.compatibility {
+            let Some(key) = custom.resolve_api_key() else {
+                tracing::debug!("context API: custom provider '{}' selected but no API key", name);
+                return None;
+            };
+            let base = custom.base_url.trim_end_matches('/');
+            match custom.compatibility {
                 ProviderCompatibility::OpenAi => {
                     fetch_openai_context(&client, base, &key, model).await
                 }
@@ -192,15 +197,15 @@ async fn query_provider_limits(config: &NcaConfig, model: &str) -> Option<usize>
 /// Cache key for one provider's context window: the provider, its endpoint, and the model.
 /// The API key is not part of it.
 fn limits_cache_key(config: &NcaConfig, model: &str) -> String {
-    let endpoint = match config.provider.default {
+    let endpoint = match &config.provider.default {
         ProviderKind::OpenRouter => config.provider.openrouter.base_url.clone(),
         ProviderKind::Anthropic => config.provider.anthropic.base_url.clone(),
         ProviderKind::OpenAi => config.provider.openai.base_url.clone(),
         ProviderKind::Alibaba => config.provider.alibaba.base_url.clone(),
-        ProviderKind::Custom => format!(
-            "{}|{:?}",
-            config.provider.custom.base_url, config.provider.custom.compatibility
-        ),
+        ProviderKind::Custom(name) => {
+            let custom = config.provider.custom.get(name);
+            custom.map(|c| format!("{}|{:?}", c.base_url, c.compatibility)).unwrap_or_default()
+        }
         ProviderKind::MiniMax => String::new(),
     };
     format!(
@@ -605,11 +610,11 @@ async fn fetch_provider_model_ids_live(config: &NcaConfig) -> Vec<String> {
         Ok(c) => c,
         Err(_) => return Vec::new(),
     };
-    match config.provider.default {
+    match &config.provider.default {
         ProviderKind::OpenRouter => fetch_openrouter_model_ids(&client, config).await,
         ProviderKind::Anthropic => fetch_anthropic_model_ids(&client, config).await,
         ProviderKind::OpenAi => fetch_openai_model_ids(&client, config).await,
-        ProviderKind::Custom => fetch_custom_model_ids(&client, config).await,
+        ProviderKind::Custom(name) => fetch_custom_model_ids(&client, config, name).await,
         ProviderKind::MiniMax => vec![
             "MiniMax-M3.1-Flash".into(),
             "MiniMax-M2.5".into(),
@@ -619,25 +624,29 @@ async fn fetch_provider_model_ids_live(config: &NcaConfig) -> Vec<String> {
     }
 }
 
-async fn fetch_custom_model_ids(client: &reqwest::Client, config: &NcaConfig) -> Vec<String> {
-    let key = match config.provider.custom.resolve_api_key() {
+async fn fetch_custom_model_ids(client: &reqwest::Client, config: &NcaConfig, name: &str) -> Vec<String> {
+    let custom = config.provider.custom.get(name);
+    let Some(custom) = custom else {
+        return Vec::new();
+    };
+    let key = match custom.resolve_api_key() {
         Some(k) => k,
         None => return Vec::new(),
     };
-    if config.provider.custom.base_url.trim().is_empty() {
+    if custom.base_url.trim().is_empty() {
         return Vec::new();
     }
 
     let mut shadow = config.clone();
-    match config.provider.custom.compatibility {
+    match custom.compatibility {
         ProviderCompatibility::OpenAi => {
             shadow.provider.openai.api_key = Some(key);
-            shadow.provider.openai.base_url = config.provider.custom.base_url.clone();
+            shadow.provider.openai.base_url = custom.base_url.clone();
             fetch_openai_model_ids(client, &shadow).await
         }
         ProviderCompatibility::Anthropic => {
             shadow.provider.anthropic.api_key = Some(key);
-            shadow.provider.anthropic.base_url = config.provider.custom.base_url.clone();
+            shadow.provider.anthropic.base_url = custom.base_url.clone();
             fetch_anthropic_model_ids(client, &shadow).await
         }
     }
@@ -947,9 +956,15 @@ mod disk_cache_tests {
         let dir = tempfile::tempdir().expect("temp dir");
         let path = dir.path().join("model-limits.json");
         let mut config = NcaConfig::default();
-        config.provider.default = ProviderKind::Custom;
-        config.provider.custom.base_url = "http://127.0.0.1:9".into();
-        config.provider.custom.api_key = Some("test-key".into());
+        config.provider.default = ProviderKind::Custom("test".to_string());
+        config.provider.custom.insert(
+            "test".to_string(),
+            nca_common::config::CustomProviderConfig {
+                base_url: "http://127.0.0.1:9".into(),
+                api_key: Some("test-key".into()),
+                ..Default::default()
+            },
+        );
         let key = limits_cache_key(&config, "test-model");
         write_disk_cache(
             &path,
