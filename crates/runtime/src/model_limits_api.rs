@@ -173,7 +173,10 @@ async fn query_provider_limits(config: &NcaConfig, model: &str) -> Option<usize>
         ProviderKind::Custom(name) => {
             let custom = config.provider.custom.get(name);
             let Some(custom) = custom else {
-                tracing::debug!("context API: custom provider '{}' not configured", name);
+                tracing::debug!(
+					"context API: custom provider '{}' not configured", 
+					name
+				);
                 return None;
             };
             let Some(key) = custom.resolve_api_key() else {
@@ -204,7 +207,9 @@ fn limits_cache_key(config: &NcaConfig, model: &str) -> String {
         ProviderKind::Alibaba => config.provider.alibaba.base_url.clone(),
         ProviderKind::Custom(name) => {
             let custom = config.provider.custom.get(name);
-            custom.map(|c| format!("{}|{:?}", c.base_url, c.compatibility)).unwrap_or_default()
+            custom
+				.map(|c| format!("{}|{:?}", c.base_url, c.compatibility))
+				.unwrap_or_default()
         }
         ProviderKind::MiniMax => String::new(),
     };
@@ -624,7 +629,11 @@ async fn fetch_provider_model_ids_live(config: &NcaConfig) -> Vec<String> {
     }
 }
 
-async fn fetch_custom_model_ids(client: &reqwest::Client, config: &NcaConfig, name: &str) -> Vec<String> {
+async fn fetch_custom_model_ids(
+	client: &reqwest::Client, 
+	config: &NcaConfig, 
+	name: &str,
+) -> Vec<String> {
     let custom = config.provider.custom.get(name);
     let Some(custom) = custom else {
         return Vec::new();

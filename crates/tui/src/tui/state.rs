@@ -986,13 +986,17 @@ impl TuiSessionState {
     /// Row count for the open provider picker (built-ins plus custom providers plus optional “Add custom…” row).
     pub fn provider_picker_visible_row_count(&self) -> usize {
         let custom_count = self.provider_picker_custom_providers().len();
-        ProviderKind::BUILTIN.len() + custom_count + usize::from(self.provider_picker_include_add_row())
+        ProviderKind::BUILTIN.len() 
+            + custom_count 
+            + usize::from(self.provider_picker_include_add_row())
     }
 
     /// Get the list of custom providers from the provider picker overlay.
     fn provider_picker_custom_providers(&self) -> Vec<String> {
         match &self.overlay {
-            UiOverlay::ProviderPicker { custom_providers, .. } => custom_providers.clone(),
+            UiOverlay::ProviderPicker { 
+                custom_providers, .. 
+            } => custom_providers.clone(),
             _ => Vec::new(),
         }
     }

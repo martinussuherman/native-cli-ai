@@ -16,9 +16,9 @@ pub fn build_provider(config: &NcaConfig) -> Result<Box<dyn Provider>, ProviderE
         ProviderKind::Anthropic => Ok(Box::new(AnthropicProvider::from_config(config)?)),
         ProviderKind::OpenAi => Ok(Box::new(OpenAiProvider::from_config(config)?)),
         ProviderKind::Alibaba => Ok(Box::new(AlibabaProvider::from_config(config)?)),
-        ProviderKind::Custom(name) => {
-            Ok(Box::new(CustomProvider::from_config_with_name(config, name)?))
-        }
+        ProviderKind::Custom(name) => Ok(Box::new(CustomProvider::from_config_with_name(
+            config, name,
+        )?)),
     }
 }
 

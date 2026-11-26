@@ -2304,7 +2304,9 @@ pub fn run_blocking(
                                 }
                                 let for_key = g.provider_picker_for_api_key();
                                 let idx = g.provider_picker_index();
-                                if g.provider_picker_include_add_row() && idx == n_builtin + n_custom {
+                                if g.provider_picker_include_add_row() 
+                                    && idx == n_builtin + n_custom 
+                                {
                                     let hint = g.model.clone();
                                     g.close_provider_picker();
                                     g.open_custom_provider_setup(hint);

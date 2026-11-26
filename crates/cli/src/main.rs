@@ -1742,7 +1742,10 @@ fn show_config(config: &NcaConfig, workspace_root: &Path, json: bool) -> anyhow:
             "Workspace config: {}",
             nca_common::config::workspace_config_path(workspace_root).display()
         );
-        println!("Default provider: {}", config.provider.default.display_name());
+        println!(
+            "Default provider: {}", 
+            config.provider.default.display_name()
+        );
         println!("Default model: {}", config.provider.active_model());
         println!("Permission mode: {:?}", config.permissions.mode);
         println!("Provider endpoints:");

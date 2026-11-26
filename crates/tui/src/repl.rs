@@ -477,7 +477,12 @@ impl Repl {
         out: ReplOutput<'_>,
     ) -> anyhow::Result<()> {
         self.persist_custom_provider_config_with_name(
-            "default", compatibility, base_url, api_key, model, out
+            "default", 
+            compatibility, 
+            base_url, 
+            api_key, 
+            model, 
+            out,
         )
         .await
     }
@@ -2154,7 +2159,12 @@ impl Repl {
                     model,
                 } => {
                     self.persist_custom_provider_config_with_name(
-                        &name, compatibility, base_url, Some(api_key), Some(model), ReplOutput::Tui(&tui_state),
+                        &name, 
+                        compatibility, 
+                        base_url, 
+                        Some(api_key), 
+                        Some(model), 
+                        ReplOutput::Tui(&tui_state),
                     )
                     .await?;
                     if let Ok(mut g) = tui_state.lock() {
